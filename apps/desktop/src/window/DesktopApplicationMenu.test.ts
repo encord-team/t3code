@@ -87,6 +87,8 @@ const layerDesktopWindow = (selectedAction: Deferred.Deferred<string>) =>
     dispatchSnapShotEvent: () => Effect.void,
     zoomMain: (direction) =>
       Deferred.succeed(selectedAction, `zoom-${direction}`).pipe(Effect.asVoid),
+    setBorderlessFullscreen: () => Effect.void,
+    toggleFullscreen: Deferred.succeed(selectedAction, "toggle-fullscreen").pipe(Effect.asVoid),
     syncAppearance: Effect.void,
   } satisfies DesktopWindow.DesktopWindow["Service"]);
 
@@ -103,6 +105,7 @@ const layerElectronMenu = (
 const configureMenu = (
   selectedAction: Deferred.Deferred<string>,
   applicationMenuTemplate: Deferred.Deferred<readonly Electron.MenuItemConstructorOptions[]>,
+  platform: DesktopEnvironment.MakeDesktopEnvironmentInput["platform"] = environmentInput.platform,
 ) =>
   Effect.gen(function* () {
     const menu = yield* DesktopApplicationMenu.DesktopApplicationMenu;
@@ -116,7 +119,7 @@ const configureMenu = (
         Layer.provideMerge(layerElectronDialog),
         Layer.provideMerge(layerElectronApp),
         Layer.provideMerge(
-          DesktopEnvironment.layer(environmentInput).pipe(
+          DesktopEnvironment.layer({ ...environmentInput, platform }).pipe(
             Layer.provide(Layer.mergeAll(NodeServices.layer, DesktopConfig.layerTest({}))),
           ),
         ),
@@ -246,3 +249,20 @@ describe("DesktopApplicationMenu", () => {
     }),
   );
 });
+
+it.effect("routes the Mac fullscreen shortcut through the saved window mode", () =>
+  Effect.gen(function* () {
+    const action = yield* Deferred.make<string>();
+    const menu = yield* Deferred.make<readonly Electron.MenuItemConstructorOptions[]>();
+    yield* configureMenu(action, menu, "darwin");
+    const template = yield* Deferred.await(menu);
+    const view = template.find((item) => item.label === "View");
+    if (!view || !Array.isArray(view.submenu)) return yield* Effect.die("missing View menu");
+    const fullscreen = view.submenu.find((item) => item.label === "Toggle Full Screen");
+    if (!fullscreen || typeof fullscreen.click !== "function")
+      return yield* Effect.die("missing fullscreen action");
+    assert.equal(fullscreen.accelerator, "Control+Command+F");
+    fullscreen.click({} as Electron.MenuItem, undefined, {} as Electron.KeyboardEvent);
+    assert.equal(yield* Deferred.await(action), "toggle-fullscreen");
+  }),
+);
