@@ -26,6 +26,7 @@ import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import {
   getLocalEnvironmentBootstraps,
   getRelayTelemetryEnabled,
+  getWindowFullscreenState,
   pickProjectFavicon,
   probeRemoteEditors,
 } from "./window.ts";
@@ -298,3 +299,34 @@ it.effect.skipIf(HostProcess.Platform.defaultValue() === "win32")(
       assert.include(editors, "webstorm");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
+
+describe("getWindowFullscreenState", () => {
+  it.effect("reports borderless fullscreen to the renderer", () => {
+    const window = {
+      isFullScreen: () => false,
+      isSimpleFullScreen: () => true,
+    } as Electron.BrowserWindow;
+    return getWindowFullscreenState.handler().pipe(
+      Effect.tap((state) => Effect.sync(() => assert.isTrue(state))),
+      Effect.provide(
+        Layer.mock(ElectronWindow.ElectronWindow)({
+          currentMainOrFirst: Effect.succeedSome(window),
+        }),
+      ),
+    );
+  });
+  it.effect("reads the current native window state", () => {
+    const window = { isFullScreen: () => true } as Electron.BrowserWindow;
+
+    return Effect.gen(function* () {
+      assert.isTrue(yield* getWindowFullscreenState.handler());
+    }).pipe(
+      Effect.provide(
+        Layer.mock(ElectronWindow.ElectronWindow)({
+          currentMainOrFirst: Effect.succeedSome(window),
+        }),
+      ),
+    );
+  });
+});
+
