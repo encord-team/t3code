@@ -1208,6 +1208,21 @@ export function AppearanceSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="appearance-interface" title="Interface">
+        {isElectron && isMacPlatform(navigator.platform) ? (
+          <SettingsRow
+            {...searchableSetting("borderless-fullscreen")}
+            description="Fill the screen and hide the Mac menu bar on the current desktop."
+            control={
+              <Switch
+                checked={settings.borderlessFullscreen}
+                onCheckedChange={(checked) =>
+                  updateSettings({ borderlessFullscreen: Boolean(checked) })
+                }
+                aria-label="Borderless fullscreen"
+              />
+            }
+          />
+        ) : null}
         <SettingsRow
           {...searchableSetting("setting-appearance-contrast")}
           description="Adjust the contrast of colors and borders across the interface."

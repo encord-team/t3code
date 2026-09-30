@@ -30,6 +30,7 @@ import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import { makeQuitShortcutHandler } from "./QuitHold.ts";
+import { setBorderlessFullscreen } from "./DesktopFullscreen.ts";
 
 const TITLEBAR_HEIGHT = 40;
 // Matches --workspace-topbar-height in apps/web/src/index.css. Native macOS
@@ -38,7 +39,7 @@ const MACOS_WORKSPACE_TOPBAR_HEIGHT = 52;
 const MACOS_WINDOW_BUTTON_RADIUS = 7;
 
 function syncMacosWindowButtons(window: Electron.BrowserWindow): void {
-  if (window.isDestroyed() || window.isFullScreen()) return;
+  if (window.isDestroyed() || window.isFullScreen() || window.isSimpleFullScreen()) return;
   window.setWindowButtonPosition({
     x: 16,
     y: Math.round(
@@ -135,6 +136,8 @@ export class DesktopWindow extends Context.Service<
     // guest page instead of the app UI. The menu routes here to always target
     // the main window.
     readonly zoomMain: (direction: MainWindowZoomDirection) => Effect.Effect<void>;
+    readonly setBorderlessFullscreen: (enabled: boolean) => Effect.Effect<void>;
+    readonly toggleFullscreen: Effect.Effect<void>;
     readonly syncAppearance: Effect.Effect<void>;
   }
 >()("@t3tools/desktop/window/DesktopWindow") {}
@@ -239,10 +242,18 @@ export function isRetryableDevelopmentRendererLoadFailure(input: {
 export function concealPendingQuitWindow(
   window: Pick<
     Electron.BrowserWindow,
-    "isDestroyed" | "isFullScreen" | "setFullScreen" | "setOpacity"
+    | "isDestroyed"
+    | "isFullScreen"
+    | "isSimpleFullScreen"
+    | "setSimpleFullScreen"
+    | "setFullScreen"
+    | "setOpacity"
   >,
 ): void {
   if (window.isDestroyed()) return;
+  if (window.isSimpleFullScreen()) {
+    window.setSimpleFullScreen(false);
+  }
   if (window.isFullScreen()) {
     window.setFullScreen(false);
   }
@@ -372,6 +383,18 @@ export const make = Effect.gen(function* () {
     const iconOption = getIconOption(iconPaths, environment.platform);
     const shouldUseDarkColors = yield* electronTheme.shouldUseDarkColors;
     const persistedSettings = yield* desktopSettings.get;
+    const borderlessFullscreen =
+      environment.platform === "darwin"
+        ? yield* clientSettings.get.pipe(
+            Effect.map(
+              Option.match({
+                onNone: () => false,
+                onSome: (settings) => settings.borderlessFullscreen,
+              }),
+            ),
+            Effect.orElseSucceed(() => false),
+          )
+        : false;
     const persistedBounds = persistedSettings.mainWindowBounds;
     const displayBoundsResult = yield* Effect.sync(() => {
       try {
@@ -431,7 +454,10 @@ export const make = Effect.gen(function* () {
         return null;
       }
       const bounds =
-        window.isFullScreen() || window.isMaximized() || window.isMinimized()
+        window.isFullScreen() ||
+        window.isSimpleFullScreen() ||
+        window.isMaximized() ||
+        window.isMinimized()
           ? window.getNormalBounds()
           : window.getBounds();
       return DesktopAppSettings.normalizeMainWindowBounds({
@@ -684,7 +710,7 @@ export const make = Effect.gen(function* () {
       });
       window.on("leave-full-screen", () => {
         syncMacosWindowButtons(window);
-        window.webContents.send(WINDOW_FULLSCREEN_STATE_CHANNEL, false);
+        window.webContents.send(WINDOW_FULLSCREEN_STATE_CHANNEL, window.isSimpleFullScreen());
       });
     }
 
@@ -824,6 +850,9 @@ export const make = Effect.gen(function* () {
       // two don't overlap and there's no blank gap between them.
       if (persistedSettings.mainWindowMaximized) {
         window.maximize();
+      }
+      if (borderlessFullscreen && !window.isDestroyed()) {
+        setBorderlessFullscreen(window, true);
       }
       void runPromise(Effect.andThen(electronWindow.reveal(window), dismissConnectingSplash));
     });
@@ -1020,6 +1049,31 @@ export const make = Effect.gen(function* () {
       // the previewed page along with the app UI. The preview browser keeps its
       // own zoom, so put each guest back where the preview left it.
       yield* previewManager.reapplyZoom();
+    }),
+    setBorderlessFullscreen: Effect.fn("desktop.window.setBorderlessFullscreen")(function* (
+      enabled: boolean,
+    ) {
+      if (environment.platform !== "darwin") return;
+      const window = yield* currentMainWindow;
+      if (Option.isNone(window)) return;
+      setBorderlessFullscreen(window.value, enabled);
+      if (!enabled) syncMacosWindowButtons(window.value);
+    }),
+    toggleFullscreen: Effect.gen(function* () {
+      const window = yield* focusedMainWindow;
+      if (Option.isNone(window) || window.value.isDestroyed()) return;
+      if (environment.platform === "darwin") {
+        const settings = yield* clientSettings.get.pipe(Effect.catch(() => Effect.succeedNone));
+        if (
+          window.value.isSimpleFullScreen() ||
+          (Option.isSome(settings) && settings.value.borderlessFullscreen)
+        ) {
+          setBorderlessFullscreen(window.value, !window.value.isSimpleFullScreen());
+          syncMacosWindowButtons(window.value);
+          return;
+        }
+      }
+      window.value.setFullScreen(!window.value.isFullScreen());
     }),
     syncAppearance: Effect.gen(function* () {
       const shouldUseDarkColors = yield* electronTheme.shouldUseDarkColors;

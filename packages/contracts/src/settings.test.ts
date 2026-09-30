@@ -1009,3 +1009,16 @@ it("validates remote device hosts and rejects ambiguous host ids", () => {
   ).toThrow();
   expect(() => decodeDeviceHostSettings({ deviceHosts: [{ ...host, port: 0 }] })).toThrow();
 });
+
+describe("borderless fullscreen setting", () => {
+  it("defaults existing installations to windowed mode", () => {
+    expect(decodeClientSettings({}).borderlessFullscreen).toBe(false);
+  });
+  it("persists and patches the preference", () => {
+    const settings = decodeClientSettings({ borderlessFullscreen: true });
+    expect(encodeClientSettings(settings).borderlessFullscreen).toBe(true);
+    expect(decodeClientSettingsPatch({ borderlessFullscreen: false }).borderlessFullscreen).toBe(
+      false,
+    );
+  });
+});

@@ -250,7 +250,20 @@ export const make = Effect.gen(function* () {
           },
           { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: zoomClick("out") },
           { type: "separator" },
-          { role: "togglefullscreen" },
+          environment.platform === "darwin"
+            ? {
+                label: "Toggle Full Screen",
+                accelerator: "Control+Command+F",
+                click: () =>
+                  runMenuEffect(
+                    "toggle-fullscreen",
+                    Effect.flatMap(
+                      DesktopWindow.DesktopWindow,
+                      (window) => window.toggleFullscreen,
+                    ),
+                  ),
+              }
+            : { role: "togglefullscreen" },
         ],
       },
       { role: "windowMenu" },
