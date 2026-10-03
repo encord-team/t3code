@@ -22,6 +22,7 @@ import {
   recallCheckoutIsRepo,
   rememberCheckoutIsRepo,
 } from "./ChatView.logic";
+import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { useLogicalProjectEnvironments } from "../hooks/useLogicalProjectEnvironments";
 import { useScratchProject } from "../hooks/useScratchProject";
@@ -86,7 +87,7 @@ import {
 } from "@t3tools/client-runtime/errors";
 import { readPastedComposerContext } from "./composerInlineTokenPaste";
 import { isPasteAsTextShortcut } from "@t3tools/client-runtime/text-paste";
-import { effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+import { canSnooze, effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
 import { childThreadInputsTitle } from "@t3tools/client-runtime/state/threads";
 import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -1041,7 +1042,7 @@ export default function ChatView(props: ChatViewProps) {
   const canReadTerminal = useEnvironmentScope(environmentId, AuthTerminalReadScope);
   const draftId = routeKind === "draft" ? props.draftId : null;
   const handleNewThread = useNewThreadHandler();
-  const { settleThread, pinThread, confirmAndUnpinThread } = useThreadActions();
+  const { settleThread, snoozeThread, pinThread, confirmAndUnpinThread } = useThreadActions();
   const routeThreadRef = scopeThreadRef(environmentId, threadId);
   const routeThreadKey = scopedThreadKey(routeThreadRef);
   const currentRouteThreadKeyRef = useRef<string | null>(routeThreadKey);
@@ -5492,6 +5493,20 @@ export default function ChatView(props: ChatViewProps) {
         }
         if (settleAndAdvance(activeThreadRef)) return;
         void settleThread(activeThreadRef).then(toastPinFailure("Failed to settle thread"));
+      },
+      "thread.snooze": ({ event }) => {
+        if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
+        if (event.repeat || !isServerThread || !activeThreadRef || !supportsSnooze) return;
+        if (activeThreadSnoozed) {
+          void handleUnsnoozeActiveThread();
+          return;
+        }
+        if (!activeThreadShell || !canSnooze(activeThreadShell, { now: new Date().toISOString() })) return;
+        void requestCustomSnooze().then(async (choice) => {
+          if (!choice) return;
+          const result = await snoozeThread(activeThreadRef, choice.snoozedUntil);
+          toastPinFailure("Failed to snooze thread")(result);
+        });
       },
       "thread.pin": () => {
         if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;

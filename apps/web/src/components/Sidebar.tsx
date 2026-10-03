@@ -1056,6 +1056,7 @@ function SnoozeMenuButton(props: {
   onOpenChange: (open: boolean) => void;
   onSnooze: (preset: Pick<SnoozePreset, "snoozedUntil">) => void;
   timestampFormat: TimestampFormat;
+  shortcutLabel: string | null;
 }) {
   const { open, onOpenChange, onSnooze, timestampFormat } = props;
   const presets = open ? resolveSnoozePresets(new Date(), timestampFormat) : [];
@@ -1079,7 +1080,9 @@ function SnoozeMenuButton(props: {
         >
           <ClockIcon className="size-3" />
         </TooltipTrigger>
-        <TooltipPopup>Snooze thread</TooltipPopup>
+        <TooltipPopup>
+          Snooze thread{props.shortcutLabel ? ` (${props.shortcutLabel})` : ""}
+        </TooltipPopup>
       </Tooltip>
       <MenuPopup side="bottom" align="end">
         {presets.map((preset) => (
@@ -1538,6 +1541,8 @@ type SidebarThreadRowProps = {
   isActive: boolean;
   openPullRequestsInRightPanel: boolean;
   jumpLabel: string | null;
+  settleShortcutLabel: string | null;
+  snoozeShortcutLabel: string | null;
   currentEnvironmentId: string | null;
   environmentLabel: string | null;
   environmentMachine: EnvironmentMachineKind;
@@ -2157,18 +2162,28 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 </span>
                 {variantAction === "unsnooze" ? (
                   !props.snoozeSupported ? null : (
-                    <button
-                      type="button"
-                      aria-label="Wake thread now"
-                      onClick={handleUnsnoozeClick}
-                      onPointerDown={handleActionPointerDown}
-                      className={cn(
-                        "pointer-events-none absolute inset-y-0 right-0 -mr-1 inline-flex cursor-pointer items-center gap-1 rounded-md bg-transparent px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:opacity-100",
-                        isWoke && "group-any-hover/sidebar-row:static",
-                      )}
-                    >
-                      <AlarmClockOffIcon className="mb-px size-3" />
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label="Wake thread now"
+                            onClick={handleUnsnoozeClick}
+                            onPointerDown={handleActionPointerDown}
+                            className={cn(
+                              "pointer-events-none absolute inset-y-0 right-0 -mr-1 inline-flex cursor-pointer items-center gap-1 rounded-md bg-transparent px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:opacity-100",
+                              isWoke && "group-any-hover/sidebar-row:static",
+                            )}
+                          />
+                        }
+                      >
+                        <AlarmClockOffIcon className="mb-px size-3" />
+                      </TooltipTrigger>
+                      <TooltipPopup side="top">
+                        Wake thread now
+                        {props.snoozeShortcutLabel ? ` (${props.snoozeShortcutLabel})` : ""}
+                      </TooltipPopup>
+                    </Tooltip>
                   )
                 ) : !props.settlementSupported ? null : variantAction === "unsettle" ? (
                   <Tooltip>
@@ -2188,21 +2203,34 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     >
                       <Undo2Icon className="mb-px size-3.5" />
                     </TooltipTrigger>
-                    <TooltipPopup side="top">Un-settle thread</TooltipPopup>
+                    <TooltipPopup side="top">
+                      Un-settle thread
+                      {props.settleShortcutLabel ? ` (${props.settleShortcutLabel})` : ""}
+                    </TooltipPopup>
                   </Tooltip>
                 ) : (
-                  <button
-                    type="button"
-                    aria-label="Settle thread"
-                    onClick={handleSettleClick}
-                    onPointerDown={handleActionPointerDown}
-                    className={cn(
-                      "pointer-events-none absolute inset-y-0 right-0 inline-flex cursor-pointer items-center gap-1 rounded-md bg-transparent px-2 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:opacity-100",
-                      isWoke && "group-any-hover/sidebar-row:static",
-                    )}
-                  >
-                    <CheckIcon className="size-3" />
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          aria-label="Settle thread"
+                          onClick={handleSettleClick}
+                            onPointerDown={handleActionPointerDown}
+                          className={cn(
+                            "pointer-events-none absolute inset-y-0 right-0 inline-flex cursor-pointer items-center gap-1 rounded-md bg-transparent px-2 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:opacity-100",
+                            isWoke && "group-any-hover/sidebar-row:static",
+                          )}
+                        />
+                      }
+                    >
+                      <CheckIcon className="size-3" />
+                    </TooltipTrigger>
+                    <TooltipPopup side="top">
+                      Settle thread
+                      {props.settleShortcutLabel ? ` (${props.settleShortcutLabel})` : ""}
+                    </TooltipPopup>
+                  </Tooltip>
                 )}
               </span>
             )}
@@ -2379,6 +2407,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                           onOpenChange={setSnoozeMenuOpen}
                           onSnooze={handleSnoozePreset}
                           timestampFormat={props.timestampFormat}
+                          shortcutLabel={props.snoozeShortcutLabel}
                         />
                       ) : null}
                       {props.settlementSupported ? (
@@ -2397,7 +2426,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                             <CheckIcon className="size-3.5" />
                             Settle
                           </TooltipTrigger>
-                          <TooltipPopup>Settle thread</TooltipPopup>
+                          <TooltipPopup>
+                            Settle thread
+                            {props.settleShortcutLabel ? ` (${props.settleShortcutLabel})` : ""}
+                          </TooltipPopup>
                         </Tooltip>
                       ) : null}
                     </span>
@@ -4499,6 +4531,8 @@ export default function Sidebar() {
     shortcutLabelForCommand(keybindings, "chat.new") ??
     (projectGroups.length <= 1 ? shortcutLabelForCommand(keybindings, "chat.newLocal") : undefined);
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  const settleShortcutLabel = shortcutLabelForCommand(keybindings, "thread.settle");
+  const snoozeShortcutLabel = shortcutLabelForCommand(keybindings, "thread.snooze");
   return (
     <>
       <ThreadContextDragGhost />
@@ -4820,6 +4854,8 @@ export default function Sidebar() {
                             wokeAt={threadWokeAt(thread, { now: snoozeNow })}
                             isActive={routeThreadKey === threadKey}
                             openPullRequestsInRightPanel={routeThreadRef !== null}
+                            settleShortcutLabel={settleShortcutLabel}
+                            snoozeShortcutLabel={snoozeShortcutLabel}
                             jumpLabel={
                               showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null
                             }
