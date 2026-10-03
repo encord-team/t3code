@@ -14,6 +14,7 @@ import { isMacPlatform } from "./lib/utils";
 export interface ShortcutEventLike {
   getModifierState?: (key: "AltGraph") => boolean;
   type?: string;
+  repeat?: boolean;
   code?: string;
   key: string;
   metaKey: boolean;
@@ -251,8 +252,90 @@ export function resolveShortcutCommand(
   return null;
 }
 
+/** Two unmodified letters separated by a space form a chord (for example, `t s`). */
+export function createShortcutChordResolver() {
+  let pending: { key: string; expiresAt: number } | null = null;
+  const reset = () => {
+    pending = null;
+  };
+
+  return {
+    reset,
+    resolve(
+      event: ShortcutEventLike,
+      keybindings: ResolvedKeybindingsConfig,
+      options?: ShortcutMatchOptions & { now?: number },
+    ): { handled: boolean; command: KeybindingCommand | null } {
+      const context = resolveContext(options);
+      const now = options?.now ?? Date.now();
+      const miss = { handled: false, command: null };
+      if (
+        context.editableFocus ||
+        context.terminalFocus ||
+        context.previewFocus ||
+        context.modelPickerOpen
+      ) {
+        reset();
+        return miss;
+      }
+      if (pending && now > pending.expiresAt) reset();
+      if (event.repeat) return { handled: pending !== null, command: null };
+      if (pending && event.key === "Escape") {
+        reset();
+        return { handled: true, command: null };
+      }
+      const prefix = pending?.key;
+      reset();
+      const platform = resolvePlatform(options);
+      for (let index = keybindings.length - 1; index >= 0; index -= 1) {
+        const binding = keybindings[index];
+        if (!binding || !matchesWhenClause(binding.whenAst, context)) continue;
+        const { shortcut } = binding;
+        if (!/^[a-z] [a-z]$/.test(shortcut.key)) continue;
+        if (
+          shortcut.metaKey ||
+          shortcut.ctrlKey ||
+          shortcut.shiftKey ||
+          shortcut.altKey ||
+          shortcut.modKey
+        )
+          continue;
+        const [first, second] = shortcut.key.split(" ");
+        if (
+          prefix === first &&
+          second &&
+          matchesShortcut(event, { ...shortcut, key: second }, platform)
+        ) {
+          return { handled: true, command: binding.command };
+        }
+      }
+      if (resolveShortcutCommand(event, keybindings, options) !== null) return miss;
+      for (const binding of keybindings) {
+        if (!matchesWhenClause(binding.whenAst, context)) continue;
+        const { shortcut } = binding;
+        if (!/^[a-z] [a-z]$/.test(shortcut.key)) continue;
+        if (
+          shortcut.metaKey ||
+          shortcut.ctrlKey ||
+          shortcut.shiftKey ||
+          shortcut.altKey ||
+          shortcut.modKey
+        )
+          continue;
+        const first = shortcut.key.slice(0, 1);
+        if (matchesShortcut(event, { ...shortcut, key: first }, platform)) {
+          pending = { key: first, expiresAt: now + 1000 };
+          return { handled: true, command: null };
+        }
+      }
+      return miss;
+    },
+  };
+}
+
 export function formatShortcutKeyLabel(key: string): string {
   if (key === " ") return "Space";
+  if (/^[a-z] [a-z]$/.test(key)) return key.toUpperCase().split(" ").join(" → ");
   if (key.length === 1) return key.toUpperCase();
   if (key === "escape") return "Esc";
   if (key === "arrowup") return "Up";

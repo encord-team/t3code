@@ -9,6 +9,7 @@ import {
   commandLabel,
   keybindingConflictLabels,
   keybindingFromKeyboardEvent,
+  recordKeybindingStroke,
   parseWhenExpressionDraft,
   shortcutToKeybindingInput,
   unknownWhenVariables,
@@ -96,6 +97,28 @@ describe("KeybindingsSettings.logic", () => {
         source: "Custom",
       }),
     ]);
+  });
+
+  it("records two-letter chords and modifier shortcuts", () => {
+    const stroke = {
+      key: "t",
+      code: "KeyT",
+      metaKey: false,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+    };
+    expect(recordKeybindingStroke(stroke, "MacIntel", null)).toEqual({ key: "t", complete: false });
+    expect(recordKeybindingStroke({ ...stroke, key: "s" }, "MacIntel", "t")).toEqual({
+      key: "t s",
+      complete: true,
+    });
+    expect(recordKeybindingStroke({ ...stroke, key: "k", metaKey: true }, "MacIntel", "t")).toEqual(
+      { key: "mod+k", complete: true },
+    );
+    expect(
+      recordKeybindingStroke({ ...stroke, key: "Shift", shiftKey: true }, "MacIntel", null),
+    ).toBeNull();
   });
 
   it("captures platform-specific mod shortcuts", () => {

@@ -1,3 +1,5 @@
+import { createShortcutChordResolver } from "../keybindings";
+import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { isChatGptUsageLimitError } from "@t3tools/shared/usageLimits";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -54,7 +56,11 @@ import {
 import { readPastedComposerContext } from "./composerInlineTokenPaste";
 import { isPasteAsTextShortcut } from "@t3tools/client-runtime/text-paste";
 import { type CodexArtifactTemplate } from "@t3tools/client-runtime/codex-artifact-templates";
-import { effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  canSnooze,
+  effectiveSnoozed,
+  threadWokeAt,
+} from "@t3tools/client-runtime/state/thread-settled";
 import {
   parseCodexFeedbackCommand,
   submitCodexFeedback,
@@ -1487,7 +1493,7 @@ export default function ChatView(props: ChatViewProps) {
   const threadSyncPhase = routeKind === "server" ? (props.threadSyncPhase ?? null) : null;
   const threadDetailLoading = threadSyncPhase === "loading";
   const handleNewThread = useNewThreadHandler();
-  const { settleThread, pinThread, confirmAndUnpinThread } = useThreadActions();
+  const { settleThread, snoozeThread, pinThread, confirmAndUnpinThread } = useThreadActions();
   const routeThreadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -6686,6 +6692,7 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   useEffect(() => {
+    const chords = createShortcutChordResolver();
     const handler = (event: globalThis.KeyboardEvent) => {
       if (preventRepeatedTerminalCloseShortcut(event, keybindings)) {
         event.stopPropagation();
@@ -6699,15 +6706,24 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
       if (!activeThreadId || isCommandPaletteOpen()) {
+        chords.reset();
         return;
       }
       const terminalFocusOwner = getTerminalFocusOwner();
       if (event.defaultPrevented && terminalFocusOwner === null) {
+        chords.reset();
         return;
       }
       const shortcutContext = getShortcutContext(event.target);
+      const chord = chords.resolve(event, keybindings, { context: shortcutContext });
+      if (chord.handled) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!chord.command) return;
+      }
 
       if (
+        !chord.handled &&
         !shortcutContext.terminalFocus &&
         !shortcutContext.modelPickerOpen &&
         shouldTypeToFocusComposer(event)
@@ -6719,9 +6735,11 @@ export default function ChatView(props: ChatViewProps) {
         }
       }
 
-      const command = resolveShortcutCommand(event, keybindings, {
-        context: shortcutContext,
-      });
+      const command =
+        chord.command ??
+        resolveShortcutCommand(event, keybindings, {
+          context: shortcutContext,
+        });
       if (!command) return;
 
       if (command === "thread.copyReference") {
@@ -6734,7 +6752,7 @@ export default function ChatView(props: ChatViewProps) {
       if (command === "thread.settle") {
         event.preventDefault();
         event.stopPropagation();
-        if (!isServerThread || !activeThreadRef || !supportsSettlement) return;
+        if (event.repeat || !isServerThread || !activeThreadRef || !supportsSettlement) return;
         if (activeThreadSettled) {
           void handleUnsettleActiveThread();
           return;
@@ -6747,6 +6765,37 @@ export default function ChatView(props: ChatViewProps) {
             stackedThreadToast({
               type: "error",
               title: "Failed to settle thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        });
+        return;
+      }
+
+      if (command === "thread.snooze") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat || !isServerThread || !activeThreadRef || !supportsSnooze) return;
+        if (activeThreadSnoozed) {
+          void handleUnsnoozeActiveThread();
+          return;
+        }
+        if (
+          !activeThreadShell ||
+          !canSnooze(activeThreadShell, { now: new Date().toISOString() })
+        ) {
+          return;
+        }
+
+        void requestCustomSnooze().then(async (choice) => {
+          if (!choice) return;
+          const result = await snoozeThread(activeThreadRef, choice.snoozedUntil);
+          if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to snooze thread",
               description: error instanceof Error ? error.message : "An error occurred.",
             }),
           );
@@ -6930,7 +6979,13 @@ export default function ChatView(props: ChatViewProps) {
       void runProjectScript(script);
     };
     window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    window.addEventListener("blur", chords.reset);
+    window.addEventListener("focusin", chords.reset);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("blur", chords.reset);
+      window.removeEventListener("focusin", chords.reset);
+    };
   }, [
     activeProject,
     activeRightPanelSurface,
@@ -6954,6 +7009,11 @@ export default function ChatView(props: ChatViewProps) {
     splitPanelTerminal,
     keybindings,
     handleUnsettleActiveThread,
+    handleUnsnoozeActiveThread,
+    activeThreadShell,
+    activeThreadSnoozed,
+    snoozeThread,
+    supportsSnooze,
     isServerThread,
     onInterrupt,
     onToggleDiff,

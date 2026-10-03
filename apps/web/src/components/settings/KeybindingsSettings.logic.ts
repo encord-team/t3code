@@ -16,7 +16,12 @@ import { isMacPlatform } from "../../lib/utils";
 import { METRIC_OPTIONS, WINDOW_OPTIONS } from "../usage/usageShortcuts";
 
 const usageCommandOrder = new Map<KeybindingCommand, number>(
-  [...METRIC_OPTIONS, ...WINDOW_OPTIONS].map((option, index) => [option.command, index]),
+  [
+    ...METRIC_OPTIONS.slice(0, 1),
+    { command: "usage.open" as const },
+    ...METRIC_OPTIONS.slice(1),
+    ...WINDOW_OPTIONS,
+  ].map((option, index) => [option.command, index]),
 );
 
 function compareUsageCommands(left: KeybindingCommand, right: KeybindingCommand): number | null {
@@ -371,4 +376,18 @@ export function keybindingFromKeyboardEvent(
   }
   parts.push(keyToken);
   return parts.join("+");
+}
+
+/** Records a modified shortcut in one stroke, or an unmodified two-letter chord. */
+export function recordKeybindingStroke(
+  event: Parameters<typeof keybindingFromKeyboardEvent>[0],
+  platform: string,
+  prefix: string | null,
+): { key: string; complete: boolean } | null {
+  const shortcut = keybindingFromKeyboardEvent(event, platform);
+  if (shortcut) return { key: shortcut, complete: true };
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;
+  const key = shortcutKeyFromEvent(event);
+  if (!/^[a-z]$/.test(key)) return null;
+  return prefix ? { key: `${prefix} ${key}`, complete: true } : { key, complete: false };
 }
