@@ -50,24 +50,18 @@ export function shouldFollowThreadWorkGroupAppend(input: {
 export function resolveThreadFeedSubmissionAnchor<AnchorId>(input: {
   readonly currentAnchorMessageId: AnchorId | null;
   readonly submittedMessageId: AnchorId;
-  readonly hasStartedTurn: boolean;
-  readonly hasUserMessage: boolean;
   readonly queuedMessageCount: number;
+  readonly queuedBehindActiveTurn: boolean;
 }): AnchorId | null {
-  if (input.hasStartedTurn || input.hasUserMessage) {
-    return null;
-  }
-
-  if (input.currentAnchorMessageId !== null) {
-    return input.currentAnchorMessageId;
-  }
-
-  return input.queuedMessageCount > 0 ? null : input.submittedMessageId;
+  return input.queuedBehindActiveTurn || input.queuedMessageCount > 0
+    ? input.currentAnchorMessageId
+    : input.submittedMessageId;
 }
 
 export function resolveThreadFeedLiveFollow(
   current: boolean,
   event: ThreadFeedLiveFollowEvent,
+  anchored = false,
 ): boolean {
   switch (event.type) {
     case "reset":
@@ -77,8 +71,10 @@ export function resolveThreadFeedLiveFollow(
     case "user-scroll-end":
       return event.userScrollSessionActive ? event.isAtEnd : current;
     case "disclosure-settled":
+      if (anchored) return current;
       return !event.userScrollSessionActive && event.isAtEnd;
     case "scroll":
+      if (anchored && !event.userScrollSessionActive) return current;
       if (event.userScrollSessionActive) {
         return false;
       }

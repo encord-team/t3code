@@ -234,31 +234,6 @@ export function shouldDockDraftHeroForSubmission(input: {
   );
 }
 
-export function shouldReleaseTimelineAnchorForToolActivity(input: {
-  anchorMessageId: MessageId | null;
-  liveFollowEnabled: boolean;
-  runningTurnId: RunId | null;
-  timelineEntries: ReadonlyArray<TimelineEntry>;
-}): boolean {
-  if (input.anchorMessageId === null || !input.liveFollowEnabled || input.runningTurnId === null) {
-    return false;
-  }
-
-  return input.timelineEntries.some((timelineEntry) => {
-    if (timelineEntry.kind !== "work" || timelineEntry.entry.runId !== input.runningTurnId) {
-      return false;
-    }
-
-    const entry = timelineEntry.entry;
-    return (
-      entry.tone === "tool" ||
-      entry.itemType !== undefined ||
-      entry.requestKind !== undefined ||
-      (entry.command?.trim().length ?? 0) > 0
-    );
-  });
-}
-
 export {
   findRecordedWorktreeSetup,
   resolveVisibleWorktreeSetup,

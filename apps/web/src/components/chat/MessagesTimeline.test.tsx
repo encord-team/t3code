@@ -895,8 +895,6 @@ describe("MessagesTimeline", () => {
   it("anchors a sent attachment message using its measured height", () => {
     const onAnchorReady = vi.fn();
     const onAnchorSizeChanged = vi.fn();
-    // Since #7897 only the first user row after the live edge may anchor, so
-    // the preceding row is an assistant reply rather than an older prompt.
     const firstEntry = buildAssistantTimelineEntry("Earlier reply.");
     const secondEntry = {
       ...buildUserTimelineEntry("Newest prompt."),
@@ -975,7 +973,7 @@ describe("MessagesTimeline", () => {
     expect(markup).not.toContain("h-28 w-52 max-w-full");
   });
 
-  it("does not reserve end space for a follow-up user message", () => {
+  it("reserves end space for a follow-up user message", () => {
     const onAnchorReady = vi.fn();
     const firstEntry = buildUserTimelineEntry("First prompt.");
     const secondEntry = {
@@ -995,9 +993,8 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).not.toContain("data-anchor-index=");
-    expect(markup).toContain('data-maintain-scroll-at-end="enabled"');
-    expect(onAnchorReady).not.toHaveBeenCalled();
+    expect(markup).toContain('data-anchor-index="1"');
+    expect(markup).not.toContain('data-maintain-scroll-at-end="enabled"');
   });
 
   it("offers preview and download actions for PDF attachments", () => {

@@ -83,13 +83,23 @@ describe("tool-group append following", () => {
 });
 
 describe("resolveThreadFeedSubmissionAnchor", () => {
+  it("keeps the reader's anchor when a follow-up queues behind an active turn", () => {
+    expect(
+      resolveThreadFeedSubmissionAnchor({
+        currentAnchorMessageId: "first-message",
+        submittedMessageId: "queued-message",
+        queuedMessageCount: 0,
+        queuedBehindActiveTurn: true,
+      }),
+    ).toBe("first-message");
+  });
+
   it("anchors the first user message in a thread", () => {
     expect(
       resolveThreadFeedSubmissionAnchor({
         currentAnchorMessageId: null,
         submittedMessageId: "first-message",
-        hasStartedTurn: false,
-        hasUserMessage: false,
+        queuedBehindActiveTurn: false,
         queuedMessageCount: 0,
       }),
     ).toBe("first-message");
@@ -100,51 +110,60 @@ describe("resolveThreadFeedSubmissionAnchor", () => {
       resolveThreadFeedSubmissionAnchor({
         currentAnchorMessageId: "first-message",
         submittedMessageId: "second-message",
-        hasStartedTurn: false,
-        hasUserMessage: false,
+        queuedBehindActiveTurn: false,
         queuedMessageCount: 1,
       }),
     ).toBe("first-message");
   });
 
-  it("preserves the first-message anchor after its outbox entry drains", () => {
+  it("anchors a new prompt after its outbox entry drains", () => {
     expect(
       resolveThreadFeedSubmissionAnchor({
         currentAnchorMessageId: "first-message",
         submittedMessageId: "second-message",
-        hasStartedTurn: false,
-        hasUserMessage: false,
+        queuedBehindActiveTurn: false,
         queuedMessageCount: 0,
       }),
-    ).toBe("first-message");
+    ).toBe("second-message");
   });
 
-  it("does not anchor a follow-up after a user message appears", () => {
+  it("anchors a follow-up after a user message appears", () => {
     expect(
       resolveThreadFeedSubmissionAnchor({
         currentAnchorMessageId: "first-message",
         submittedMessageId: "second-message",
-        hasStartedTurn: false,
-        hasUserMessage: true,
+        queuedBehindActiveTurn: false,
         queuedMessageCount: 0,
       }),
-    ).toBeNull();
+    ).toBe("second-message");
   });
 
-  it("does not anchor a thread that has already started a turn", () => {
+  it("anchors a new prompt in an existing thread", () => {
     expect(
       resolveThreadFeedSubmissionAnchor({
         currentAnchorMessageId: null,
         submittedMessageId: "second-message",
-        hasStartedTurn: true,
-        hasUserMessage: false,
+        queuedBehindActiveTurn: false,
         queuedMessageCount: 0,
       }),
-    ).toBeNull();
+    ).toBe("second-message");
   });
 });
 
 describe("resolveThreadFeedLiveFollow", () => {
+  it.each(["scroll", "disclosure-settled"] as const)(
+    "keeps a sent prompt in place after programmatic %s events",
+    (type) => {
+      expect(
+        resolveThreadFeedLiveFollow(
+          false,
+          { type, isAtEnd: true, userScrollSessionActive: false },
+          true,
+        ),
+      ).toBe(false);
+    },
+  );
+
   it("pauses immediately when the user starts scrolling", () => {
     expect(resolveThreadFeedLiveFollow(true, { type: "user-scroll-begin" })).toBe(false);
   });

@@ -2158,9 +2158,17 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     },
     [props.onEndFollowEnabledChange],
   );
+  const anchorMessageIdRef = useRef(props.anchorMessageId);
+  anchorMessageIdRef.current = props.anchorMessageId;
   const transitionEndFollow = useCallback(
     (event: ThreadFeedLiveFollowEvent) => {
-      setEndFollow(resolveThreadFeedLiveFollow(endFollowEnabledRef.current, event));
+      setEndFollow(
+        resolveThreadFeedLiveFollow(
+          endFollowEnabledRef.current,
+          event,
+          anchorMessageIdRef.current !== null,
+        ),
+      );
     },
     [setEndFollow],
   );
@@ -2571,9 +2579,8 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     () => new Map<string, ThreadWorkGroupScrollPosition>(),
     [feedThreadKey],
   );
-  // A thread switch opens pinned to the end; a send explicitly returns to the
-  // live edge (ThreadDetailScreen scrolls the new message into place). Both
-  // re-arm follow regardless of where the user had scrolled before.
+  // Open threads at the end. A sent prompt is positioned once by the detail
+  // screen, then stays in place while its response grows.
   useEffect(() => {
     clearUserScrollSettle();
     userScrollSessionRef.current = false;
@@ -2583,9 +2590,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     if (props.submittedMessageId !== null) {
       clearUserScrollSettle();
       userScrollSessionRef.current = false;
-      transitionEndFollow({ type: "reset" });
+      setEndFollow(props.anchorMessageId === null);
     }
-  }, [clearUserScrollSettle, props.submittedMessageId, transitionEndFollow]);
+  }, [clearUserScrollSettle, props.submittedMessageId, props.anchorMessageId, setEndFollow]);
 
   const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
@@ -3054,7 +3061,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             // Follow the measured end immediately. Animating toward an estimated
             // end races row measurement when a pending message is acknowledged.
             maintainScrollAtEnd={
-              disclosureToggleSettling || !endFollowEnabled
+              disclosureToggleSettling || !endFollowEnabled || anchoredEndSpace
                 ? false
                 : {
                     animated: false,
@@ -3066,7 +3073,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
                   }
             }
             maintainVisibleContentPosition={
-              endFollowEnabled && !disclosureToggleSettling ? false : maintainVisibleContentPosition
+              endFollowEnabled && !anchoredEndSpace && !disclosureToggleSettling
+                ? false
+                : maintainVisibleContentPosition
             }
             data={presentedFeed}
             extraData={listAppearanceData}

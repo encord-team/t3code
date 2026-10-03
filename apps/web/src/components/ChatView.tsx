@@ -493,7 +493,6 @@ import {
   shouldOpenProactivePullRequest,
   shouldRetargetThreadPullRequestPanel,
   shouldOpenProactiveTurnDiff,
-  shouldReleaseTimelineAnchorForToolActivity,
   shouldRenderPreviewMiniPlayer,
   getStartedThreadModelChangeBlockReason,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
@@ -1489,9 +1488,9 @@ const noopHeldAttachment = (_attachment: ChatFileAttachment) => {};
 /**
  * Drops the send-time anchored end space. That space is what holds a sent
  * message near the top while its turn streams, and it keeps LegendList's
- * maintainScrollAtEnd switched off for as long as it is installed. Tool
- * activity and every return to the live edge release the anchor, otherwise
- * the timeline settles into "following-end" with nothing following anything.
+ * maintainScrollAtEnd switched off for as long as it is installed. Turn
+ * completion releases the spacer; manual navigation back to the live edge
+ * also re-enables end following.
  */
 function releaseChatTimelineAnchor<T extends { readonly messageId: MessageId | null }>(
   current: T,
@@ -5924,6 +5923,7 @@ export default function ChatView(props: ChatViewProps) {
 
     isAtEndRef.current = true;
     timelineScrollModeRef.current = "anchoring-new-turn";
+    setTimelineLiveFollowEnabled(false);
     liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
     pendingTimelineAnchorRef.current = messageId;
     activeTimelineAnchorIndexRef.current = null;
@@ -6170,30 +6170,16 @@ export default function ChatView(props: ChatViewProps) {
           }
           return;
         }
-        const scrollNode = list.getScrollableNode();
-        let finished = false;
-        const finishAnimatedPositioning = () => {
-          if (finished) {
-            return;
-          }
-          finished = true;
-          window.clearTimeout(fallbackTimer);
-          scrollNode.removeEventListener("scrollend", finishAnimatedPositioning);
-          if (positionedTimelineAnchorRef.current !== messageId) {
-            return;
-          }
-          const scrollOffset = list.getState().scroll;
-          void list.scrollToOffset({ offset: scrollOffset, animated: false });
-          settledTimelineAnchorRef.current = messageId;
-        };
-        const fallbackTimer = window.setTimeout(finishAnimatedPositioning, 750);
-        scrollNode.addEventListener("scrollend", finishAnimatedPositioning, { once: true });
+        // Position the measured prompt directly. A smooth scroll can be
+        // interrupted by streaming layout updates; freezing its current offset
+        // on scrollend then leaves the prompt halfway down the viewport.
         void list.scrollToIndex({
           index: anchorIndex,
-          animated: true,
+          animated: false,
           viewPosition: 0,
           viewOffset: CHAT_LIST_ANCHOR_OFFSET,
         });
+        settledTimelineAnchorRef.current = messageId;
       });
     };
     requestAnimationFrame(() => positionAnchor(12));
@@ -6245,6 +6231,19 @@ export default function ChatView(props: ChatViewProps) {
   }, [composerRef]);
 
   const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
+    // Streaming growth must not move the prompt offscreen, even after the
+    // completed turn releases its end-space filler. User navigation changes
+    // the mode before scroll events can re-arm end following.
+    if (timelineScrollModeRef.current === "anchoring-new-turn") {
+      isAtEndRef.current = isAtEnd;
+      if (isAtEnd) {
+        showScrollDebouncer.current.cancel();
+        setShowScrollToBottom(false);
+      } else {
+        showScrollDebouncer.current.maybeExecute();
+      }
+      return;
+    }
     if (
       !isAtEnd &&
       liveFollowUserScrollGenerationRef.current === anchorUserScrollGenerationRef.current
@@ -6275,26 +6274,6 @@ export default function ChatView(props: ChatViewProps) {
       showScrollDebouncer.current.maybeExecute();
     }
   }, []);
-
-  useLayoutEffect(() => {
-    if (timelineScrollModeRef.current !== "anchoring-new-turn") return;
-    if (
-      shouldReleaseTimelineAnchorForToolActivity({
-        anchorMessageId: timelineAnchorMessageId,
-        liveFollowEnabled: timelineLiveFollowEnabled,
-        runningTurnId: activeRunningTurnId,
-        timelineEntries,
-      })
-    ) {
-      scrollToEnd();
-    }
-  }, [
-    activeRunningTurnId,
-    scrollToEnd,
-    timelineAnchorMessageId,
-    timelineEntries,
-    timelineLiveFollowEnabled,
-  ]);
 
   useEffect(() => {
     setPullRequestDialogState(null);
@@ -9031,8 +9010,8 @@ export default function ChatView(props: ChatViewProps) {
       // timeline away from the provider work already in flight.
       isAtEndRef.current = true;
       timelineScrollModeRef.current = "anchoring-new-turn";
+      setTimelineLiveFollowEnabled(false);
       liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-      setTimelineLiveFollowEnabled(true);
       pendingTimelineAnchorRef.current = messageIdForSend;
       activeTimelineAnchorIndexRef.current = null;
       showScrollDebouncer.current.cancel();
@@ -9675,8 +9654,8 @@ export default function ChatView(props: ChatViewProps) {
     // Position this sent row once LegendList has measured the anchored tail.
     isAtEndRef.current = true;
     timelineScrollModeRef.current = "anchoring-new-turn";
+    setTimelineLiveFollowEnabled(false);
     liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-    setTimelineLiveFollowEnabled(true);
     pendingTimelineAnchorRef.current = messageIdForSend;
     activeTimelineAnchorIndexRef.current = null;
     showScrollDebouncer.current.cancel();

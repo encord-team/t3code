@@ -911,9 +911,6 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const handleSendMessage = useCallback(
     async (followUp?: ActiveTurnComposerAction) => {
       const targetThreadKey = selectedThreadKey;
-      const hasUserMessage = selectedThreadFeed.some(
-        (entry) => entry.type === "message" && entry.message.role === "user",
-      );
       const messageId = await props.onSendMessage(followUp);
       if (messageId === null || selectedThreadKeyRef.current !== targetThreadKey) {
         return messageId;
@@ -927,9 +924,10 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
         resolveThreadFeedSubmissionAnchor({
           currentAnchorMessageId: anchorMessageId,
           submittedMessageId: messageId,
-          hasStartedTurn: props.selectedThread.latestRun !== null,
-          hasUserMessage,
           queuedMessageCount: props.selectedThreadQueueCount,
+          queuedBehindActiveTurn:
+            props.activeThreadBusy &&
+            (!props.canSteerActiveTurn || (followUp ?? props.followUpBehavior) === "queue"),
         }),
       );
       composerEditorRef.current?.blur();
@@ -939,9 +937,10 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       anchorMessageId,
       clearUsageLimitsFor,
       props.onSendMessage,
-      props.selectedThread.latestRun,
       props.selectedThreadQueueCount,
-      selectedThreadFeed,
+      props.activeThreadBusy,
+      props.canSteerActiveTurn,
+      props.followUpBehavior,
       selectedThreadKey,
     ],
   );
@@ -982,10 +981,18 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     [props.onChangeDraftMessage],
   );
 
+  const handleEndFollowEnabledChange = useCallback((enabled: boolean) => {
+    setEndFollowEnabled(enabled);
+    if (enabled) setAnchorMessageId(null);
+  }, []);
+
   const handleScrollToEnd = useCallback(() => {
     void Haptics.selectionAsync();
-    void scrollMessageToEnd({ animated: true, closeKeyboard: false }).catch(() => {
-      freeze.set(false);
+    setAnchorMessageId(null);
+    requestAnimationFrame(() => {
+      void scrollMessageToEnd({ animated: true, closeKeyboard: false }).catch(() => {
+        freeze.set(false);
+      });
     });
   }, [freeze, scrollMessageToEnd]);
 
@@ -1085,7 +1092,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               layoutVariant={layoutVariant}
               usesAutomaticContentInsets={props.usesAutomaticContentInsets}
               onHeaderMaterialVisibilityChange={props.onHeaderMaterialVisibilityChange}
-              onEndFollowEnabledChange={setEndFollowEnabled}
+              onEndFollowEnabledChange={handleEndFollowEnabledChange}
               skills={selectedProviderSkills}
               onUseArtifactTemplate={handleUseArtifactTemplate}
             />

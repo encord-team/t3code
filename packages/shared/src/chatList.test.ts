@@ -16,7 +16,7 @@ const rows: ReadonlyArray<Row> = [
 const getAnchorId = (row: Row) => (row.anchorable ? row.id : null);
 
 describe("resolveChatListAnchoredEndSpace", () => {
-  it("anchors only the first eligible row", () => {
+  it("anchors the requested eligible row", () => {
     expect(resolveChatListAnchoredEndSpace(rows, "first", getAnchorId)).toEqual({
       anchorIndex: 0,
       anchorOffset: CHAT_LIST_ANCHOR_OFFSET,
@@ -34,8 +34,11 @@ describe("resolveChatListAnchoredEndSpace", () => {
     });
   });
 
-  it("does not reserve end space for later eligible rows", () => {
-    expect(resolveChatListAnchoredEndSpace(rows, "latest", getAnchorId)).toBeUndefined();
+  it("reserves end space for a follow-up prompt", () => {
+    expect(resolveChatListAnchoredEndSpace(rows, "latest", getAnchorId)).toEqual({
+      anchorIndex: 2,
+      anchorOffset: CHAT_LIST_ANCHOR_OFFSET,
+    });
   });
 
   it("skips ineligible rows before the first anchor", () => {
