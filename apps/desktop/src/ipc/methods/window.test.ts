@@ -24,7 +24,6 @@ import * as DesktopBackendPool from "../../backend/DesktopBackendPool.ts";
 import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as DesktopAppSettings from "../../settings/DesktopAppSettings.ts";
-import type { DesktopSettings } from "../../settings/DesktopAppSettings.ts";
 import {
   getLocalEnvironmentBootstraps,
   getWindowFullscreenState,
@@ -153,6 +152,20 @@ describe("getLocalEnvironmentBootstraps", () => {
 });
 
 describe("getWindowFullscreenState", () => {
+  it.effect("reports borderless fullscreen to the renderer", () => {
+    const window = {
+      isFullScreen: () => false,
+      isSimpleFullScreen: () => true,
+    } as Electron.BrowserWindow;
+    return getWindowFullscreenState.handler().pipe(
+      Effect.tap((state) => Effect.sync(() => assert.isTrue(state))),
+      Effect.provide(
+        Layer.mock(ElectronWindow.ElectronWindow)({
+          currentMainOrFirst: Effect.succeedSome(window),
+        }),
+      ),
+    );
+  });
   it.effect("reads the current native window state", () => {
     const window = { isFullScreen: () => true } as Electron.BrowserWindow;
 
@@ -213,7 +226,10 @@ describe("pasteAsText", () => {
 });
 
 describe("pickProjectFavicon", () => {
-  const pickerLayer = (pickFiles: () => Effect.Effect<Array<string>>, settings?: DesktopSettings) =>
+  const pickerLayer = (
+    pickFiles: () => Effect.Effect<Array<string>>,
+    settings?: DesktopAppSettings.DesktopSettings,
+  ) =>
     Layer.mergeAll(
       Layer.mock(ElectronDialog.ElectronDialog)({ pickFiles }),
       Layer.mock(ElectronWindow.ElectronWindow)({

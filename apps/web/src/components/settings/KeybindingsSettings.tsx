@@ -774,7 +774,8 @@ function useKeybindingRowEditor({
   };
 
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Tab" || event.repeat) return;
+    // Tab is recorded like any key while recording; after that it moves focus on.
+    if ((event.key === "Tab" && !isRecording) || event.repeat) return;
     event.preventDefault();
     if (event.key === "Escape") {
       recordingPrefix.current = null;
@@ -1102,7 +1103,8 @@ function useNewKeybindingDraft({
   };
 
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Tab" || event.repeat) return;
+    // Tab is recorded like any key while recording; after that it moves focus on.
+    if ((event.key === "Tab" && !isRecording) || event.repeat) return;
     event.preventDefault();
     if (event.key === "Escape") {
       recordingPrefix.current = null;
