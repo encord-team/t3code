@@ -12,6 +12,7 @@ import {
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import {
+  createShortcutChordResolver,
   formatShortcutLabel,
   isDiffToggleShortcut,
   isRichTextBoldShortcut,
@@ -222,6 +223,106 @@ describe("settle thread shortcut", () => {
         platform: "Win32",
         context: { terminalFocus: true },
       }),
+    );
+  });
+});
+
+describe("thread shortcut chords", () => {
+  const bindings = compileResolvedKeybindingsConfig([
+    { key: "t s", command: "thread.settle" },
+    { key: "t n", command: "thread.snooze" },
+  ]);
+
+  it.each([
+    ["s", "thread.settle"],
+    ["n", "thread.snooze"],
+  ] as const)("resolves t then %s", (key, command) => {
+    const resolver = createShortcutChordResolver();
+    assert.deepEqual(resolver.resolve(event({ key: "t" }), bindings), {
+      handled: true,
+      command: null,
+    });
+    assert.deepEqual(resolver.resolve(event({ key }), bindings), {
+      handled: true,
+      command,
+    });
+    assert.isFalse(resolver.resolve(event({ key }), bindings).handled);
+  });
+
+  it("expires and cancels pending chords", () => {
+    const resolver = createShortcutChordResolver();
+    resolver.resolve(event({ key: "t" }), bindings, { now: 0 });
+    assert.isFalse(resolver.resolve(event({ key: "s" }), bindings, { now: 1001 }).handled);
+    resolver.resolve(event({ key: "t" }), bindings);
+    assert.isTrue(resolver.resolve(event({ key: "Escape" }), bindings).handled);
+    assert.isFalse(resolver.resolve(event({ key: "s" }), bindings).handled);
+    resolver.resolve(event({ key: "t" }), bindings);
+    assert.isFalse(resolver.resolve(event({ key: "x" }), bindings).handled);
+    assert.isFalse(resolver.resolve(event({ key: "s" }), bindings).handled);
+  });
+
+  it.each(["editableFocus", "terminalFocus", "previewFocus", "modelPickerOpen"])(
+    "leaves %s input alone and clears a pending chord",
+    (focus) => {
+      const resolver = createShortcutChordResolver();
+      resolver.resolve(event({ key: "t" }), bindings);
+      assert.isFalse(
+        resolver.resolve(event({ key: "s" }), bindings, {
+          context: { [focus]: true },
+        }).handled,
+      );
+      assert.isFalse(resolver.resolve(event({ key: "s" }), bindings).handled);
+      assert.isFalse(
+        resolver.resolve(event({ key: "t" }), bindings, {
+          context: { [focus]: true },
+        }).handled,
+      );
+    },
+  );
+
+  it("honors conditions, overrides and reset", () => {
+    const resolver = createShortcutChordResolver();
+    const custom = compileResolvedKeybindingsConfig([
+      { key: "t s", command: "thread.settle", when: "isDesktop" },
+      { key: "t s", command: "thread.snooze", when: "isDesktop" },
+    ]);
+    assert.isFalse(
+      resolver.resolve(event({ key: "t" }), custom, {
+        context: { isDesktop: false },
+      }).handled,
+    );
+    resolver.resolve(event({ key: "t" }), custom, { context: { isDesktop: true } });
+    assert.equal(
+      resolver.resolve(event({ key: "s" }), custom, {
+        context: { isDesktop: true },
+      }).command,
+      "thread.snooze",
+    );
+    resolver.resolve(event({ key: "t" }), bindings);
+    resolver.reset();
+    assert.isFalse(resolver.resolve(event({ key: "s" }), bindings).handled);
+  });
+
+  it("does not start a chord with modifiers or repeat events", () => {
+    const resolver = createShortcutChordResolver();
+    assert.isFalse(resolver.resolve(event({ key: "t", ctrlKey: true }), bindings).handled);
+    assert.isFalse(resolver.resolve({ ...event({ key: "t" }), repeat: true }, bindings).handled);
+  });
+
+  it("resolves the default chords and formats their labels", () => {
+    const resolver = createShortcutChordResolver();
+    for (const [key, command] of [
+      ["s", "thread.settle"],
+      ["n", "thread.snooze"],
+    ] as const) {
+      resolver.resolve(event({ key: "t" }), DEFAULT_RESOLVED_KEYBINDINGS);
+      assert.equal(resolver.resolve(event({ key }), DEFAULT_RESOLVED_KEYBINDINGS).command, command);
+    }
+    assert.equal(
+      shortcutLabelForCommand(DEFAULT_RESOLVED_KEYBINDINGS, "thread.settle", {
+        platform: "MacIntel",
+      }),
+      "T → S",
     );
   });
 });
@@ -1351,24 +1452,24 @@ describe("composer and pull request shortcuts", () => {
   }
 
   for (const platform of ["MacIntel", "Win32", "Linux"]) {
-    it.each([
-      ["s", "thread.settle"],
-      ["p", "thread.pin"],
-    ])(`preserves the existing %s shortcut on ${platform}`, (key, command) => {
-      assert.strictEqual(
-        resolveShortcutCommand(
-          event({
-            key,
-            shiftKey: true,
-            metaKey: platform === "MacIntel",
-            ctrlKey: platform !== "MacIntel",
-          }),
-          DEFAULT_RESOLVED_KEYBINDINGS,
-          { platform },
-        ),
-        command,
-      );
-    });
+    it.each([["p", "thread.pin"]])(
+      `preserves the existing %s shortcut on ${platform}`,
+      (key, command) => {
+        assert.strictEqual(
+          resolveShortcutCommand(
+            event({
+              key,
+              shiftKey: true,
+              metaKey: platform === "MacIntel",
+              ctrlKey: platform !== "MacIntel",
+            }),
+            DEFAULT_RESOLVED_KEYBINDINGS,
+            { platform },
+          ),
+          command,
+        );
+      },
+    );
   }
 
   const altEffortBindings = compileResolvedKeybindingsConfig([

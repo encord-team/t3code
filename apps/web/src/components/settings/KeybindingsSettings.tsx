@@ -35,7 +35,7 @@ import {
 
 import { isElectron } from "../../env";
 import { useOpenInPreferredEditor } from "../../editorPreferences";
-import { formatShortcutLabel } from "../../keybindings";
+import { formatShortcutKeyLabel, formatShortcutLabel } from "../../keybindings";
 import { cn } from "../../lib/utils";
 import { serverEnvironment } from "../../state/server";
 import { useSettingsScope } from "./SettingsScopeContext";
@@ -57,7 +57,7 @@ import {
   DEFAULT_WHEN_VARIABLE,
   isKnownWhenVariable,
   keybindingConflictLabels,
-  keybindingFromKeyboardEvent,
+  recordKeybindingStroke,
   parseWhenExpressionDraft,
   type KeybindingCommandOption,
   type KeybindingRow,
@@ -95,9 +95,11 @@ function KeybindingPill({ value }: { value: string }) {
                   : "Alt"
                 : part === "ctrl"
                   ? "⌃"
-                  : part.length === 1
-                    ? part.toUpperCase()
-                    : part}
+                  : /^[a-z] [a-z]$/.test(part)
+                    ? formatShortcutKeyLabel(part)
+                    : part.length === 1
+                      ? part.toUpperCase()
+                      : part}
         </Kbd>
       ))}
     </KbdGroup>
@@ -750,8 +752,12 @@ function useKeybindingRowEditor({
 }) {
   const [draft, setDraft] = useReducer(keybindingRowDraftReducer, row, createKeybindingRowDraft);
   const { keyDraft, whenDraft, isRecording, isWhenDraftValid } = draft;
+  const recordingPrefix = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isRecording) recordingPrefix.current = null;
+  }, [isRecording]);
   const whenDraftExpression = whenAstToExpression(whenDraft);
-  const isDirty = keyDraft !== row.key || whenDraftExpression !== row.when;
+  const isDirty = !isRecording && (keyDraft !== row.key || whenDraftExpression !== row.when);
   const conflictLabels = keybindingConflictLabels(allRows, {
     rowId: row.id,
     key: keyDraft,
@@ -769,15 +775,21 @@ function useKeybindingRowEditor({
 
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
     // Tab is recorded like any key while recording; after that it moves focus on.
-    if (event.key === "Tab" && !isRecording) return;
+    if ((event.key === "Tab" && !isRecording) || event.repeat) return;
     event.preventDefault();
     if (event.key === "Escape") {
+      recordingPrefix.current = null;
       setDraft({ keyDraft: row.key, isRecording: false });
       return;
     }
-    const next = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform);
+    const next = recordKeybindingStroke(
+      event.nativeEvent,
+      navigator.platform,
+      recordingPrefix.current,
+    );
     if (!next) return;
-    setDraft({ keyDraft: next, isRecording: false });
+    recordingPrefix.current = next.complete ? null : next.key;
+    setDraft({ keyDraft: next.key, isRecording: !next.complete });
   };
 
   return {
@@ -854,13 +866,15 @@ function KeybindingKeyControl({
           data-keybinding-capture=""
           autoFocus={isRecording}
           aria-label={`Keybinding for ${commandLabel(row.command)}`}
-          value={isRecording ? "" : keyDraft}
-          placeholder={isRecording ? "Press shortcut" : "Unassigned"}
+          value={isRecording && !/^[a-z]$/.test(keyDraft) ? "" : keyDraft}
+          placeholder={isRecording ? "Shortcut or two letters" : "Unassigned"}
           size="sm"
           font="mono"
           className="w-44"
           onFocus={() => setDraft({ isRecording: true })}
-          onBlur={() => setDraft({ isRecording: false })}
+          onBlur={() =>
+            setDraft({ isRecording: false, ...(isRecording ? { keyDraft: row.key } : {}) })
+          }
           onChange={(event) => setDraft({ keyDraft: event.currentTarget.value })}
           onKeyDown={captureKeybinding}
         />
@@ -1065,6 +1079,10 @@ function useNewKeybindingDraft({
     isWhenDraftValid: true,
   });
   const { keyDraft, whenDraft, isRecording, isWhenDraftValid } = draft;
+  const recordingPrefix = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isRecording) recordingPrefix.current = null;
+  }, [isRecording]);
   const whenDraftExpression = whenAstToExpression(whenDraft);
   const conflictLabels = keybindingConflictLabels(allRows, {
     rowId: "new",
@@ -1072,7 +1090,8 @@ function useNewKeybindingDraft({
     when: whenDraftExpression,
   });
   const commandLabelText = commandDraft ? commandLabel(commandDraft) : "new keybinding";
-  const canSave = Boolean(commandDraft) && keyDraft.trim().length > 0 && isWhenDraftValid;
+  const canSave =
+    !isRecording && Boolean(commandDraft) && keyDraft.trim().length > 0 && isWhenDraftValid;
 
   const save = () => {
     if (!commandDraft) return;
@@ -1085,15 +1104,21 @@ function useNewKeybindingDraft({
 
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
     // Tab is recorded like any key while recording; after that it moves focus on.
-    if (event.key === "Tab" && !isRecording) return;
+    if ((event.key === "Tab" && !isRecording) || event.repeat) return;
     event.preventDefault();
     if (event.key === "Escape") {
+      recordingPrefix.current = null;
       setDraft({ keyDraft: "", isRecording: false });
       return;
     }
-    const next = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform);
+    const next = recordKeybindingStroke(
+      event.nativeEvent,
+      navigator.platform,
+      recordingPrefix.current,
+    );
     if (!next) return;
-    setDraft({ keyDraft: next, isRecording: false });
+    recordingPrefix.current = next.complete ? null : next.key;
+    setDraft({ keyDraft: next.key, isRecording: !next.complete });
   };
 
   return {
@@ -1165,13 +1190,15 @@ function NewKeybindingKeyInput({
       data-keybinding-capture=""
       autoFocus={autoFocus}
       aria-label={`Keybinding for ${draft.commandLabelText}`}
-      value={draft.isRecording ? "" : draft.keyDraft}
-      placeholder={draft.isRecording ? "Press shortcut" : "Unassigned"}
+      value={draft.isRecording && !/^[a-z]$/.test(draft.keyDraft) ? "" : draft.keyDraft}
+      placeholder={draft.isRecording ? "Shortcut or two letters" : "Unassigned"}
       size="sm"
       font="mono"
       className={className}
       onFocus={() => draft.setDraft({ isRecording: true })}
-      onBlur={() => draft.setDraft({ isRecording: false })}
+      onBlur={() =>
+        draft.setDraft({ isRecording: false, ...(draft.isRecording ? { keyDraft: "" } : {}) })
+      }
       onChange={(event) => draft.setDraft({ keyDraft: event.currentTarget.value })}
       onKeyDown={draft.captureKeybinding}
     />

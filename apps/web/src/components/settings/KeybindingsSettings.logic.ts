@@ -389,3 +389,17 @@ export function keybindingFromKeyboardEvent(
   parts.push(keyToken);
   return parts.join("+");
 }
+
+/** Records a modified shortcut in one stroke, or an unmodified two-letter chord. */
+export function recordKeybindingStroke(
+  event: Parameters<typeof keybindingFromKeyboardEvent>[0],
+  platform: string,
+  prefix: string | null,
+): { key: string; complete: boolean } | null {
+  const key = shortcutKeyFromEvent(event);
+  if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && /^[a-z]$/.test(key)) {
+    return prefix ? { key: `${prefix} ${key}`, complete: true } : { key, complete: false };
+  }
+  const shortcut = keybindingFromKeyboardEvent(event, platform);
+  return shortcut ? { key: shortcut, complete: true } : null;
+}
