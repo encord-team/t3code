@@ -96,6 +96,8 @@ function makeDesktopWindowLayer(
     dispatchMenuAction: () => Effect.void,
     dispatchSnapShotEvent: () => Effect.void,
     zoomMain: () => Effect.void,
+    setBorderlessFullscreen: () => Effect.void,
+    toggleFullscreen: Effect.void,
     syncAppearance: Effect.void,
   });
 }

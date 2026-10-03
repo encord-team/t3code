@@ -152,6 +152,20 @@ describe("getLocalEnvironmentBootstraps", () => {
 });
 
 describe("getWindowFullscreenState", () => {
+  it.effect("reports borderless fullscreen to the renderer", () => {
+    const window = {
+      isFullScreen: () => false,
+      isSimpleFullScreen: () => true,
+    } as Electron.BrowserWindow;
+    return getWindowFullscreenState.handler().pipe(
+      Effect.tap((state) => Effect.sync(() => assert.isTrue(state))),
+      Effect.provide(
+        Layer.mock(ElectronWindow.ElectronWindow)({
+          currentMainOrFirst: Effect.succeedSome(window),
+        }),
+      ),
+    );
+  });
   it.effect("reads the current native window state", () => {
     const window = { isFullScreen: () => true } as Electron.BrowserWindow;
 
