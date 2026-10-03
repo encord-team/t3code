@@ -28,6 +28,14 @@ screen and hide the menu bar without moving to a separate desktop. The preferenc
 on this device and applied when the app opens. Turn it off to restore the window, or use
 **Control+Command+F** to leave and re-enter borderless fullscreen while keeping the preference.
 
+## Composer context
+
+Git-backed projects show branch and worktree controls below the composer while you create a thread.
+The controls retreat as the composer docks after you send the first message.
+
+Turn on **Composer context** to keep those controls visible after the thread starts. This preference
+applies to the web and desktop clients.
+
 ## Motion
 
 The main sidebar, right panel, and terminal drawer open and close immediately by default. Move the
