@@ -120,8 +120,19 @@ a shortcut.
 
 ## Commands with special behavior
 
+Thread chords work while reading a thread, outside text fields and terminals.
+Press the second key within one second; Escape cancels. In the configuration
+file, use two letters separated by a space, such as `"t s"`.
+
 `thread.stop` interrupts the running turn in the focused thread. It has no default
 shortcut; assign one in **Settings → Keybindings**.
+
+`thread.settle` (`t` then `s` by default) settles the focused thread. Use the
+same shortcut on a settled thread to make it active again.
+
+`thread.snooze` (`t` then `n` by default) opens the snooze time picker for the
+focused thread. Use the same shortcut on a snoozed thread to wake it. Threads
+waiting for approval or input, or with a queued turn start, cannot be snoozed.
 
 `thread.undo` (`mod+z` by default) reverses the actions shown in the notice at the
 bottom of the sidebar, such as unpin, settle, snooze, archive, or discarding a
