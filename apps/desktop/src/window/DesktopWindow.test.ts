@@ -1285,7 +1285,7 @@ describe("DesktopWindow", () => {
       fakeWindow.setSimpleFullScreen.mockImplementation((enabled) => {
         fakeWindow.isSimpleFullScreen.mockReturnValue(enabled);
       });
-      const layer = makeTestLayer({
+      const layer = layerTest({
         window: fakeWindow.window,
         createCount,
         mainWindow,

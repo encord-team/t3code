@@ -399,9 +399,9 @@ export function recordKeybindingStroke(
   prefix: string | null,
 ): { key: string; complete: boolean } | null {
   const shortcut = keybindingFromKeyboardEvent(event, platform);
-  if (shortcut) return { key: shortcut, complete: true };
-  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;
   const key = shortcutKeyFromEvent(event);
-  if (!/^[a-z]$/.test(key)) return null;
-  return prefix ? { key: `${prefix} ${key}`, complete: true } : { key, complete: false };
+  if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && /^[a-z]$/.test(key)) {
+    return prefix ? { key: `${prefix} ${key}`, complete: true } : { key, complete: false };
+  }
+  return shortcut ? { key: shortcut, complete: true } : null;
 }

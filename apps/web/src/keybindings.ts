@@ -221,7 +221,7 @@ export function createShortcutChordResolver() {
         if (
           prefix === first &&
           second &&
-          matchesShortcut(event, { ...shortcut, key: second }, platform)
+          matchesKeybindingShortcut(event, { ...shortcut, key: second }, platform)
         ) {
           return { handled: true, command: binding.command };
         }
@@ -240,7 +240,7 @@ export function createShortcutChordResolver() {
         )
           continue;
         const first = shortcut.key.slice(0, 1);
-        if (matchesShortcut(event, { ...shortcut, key: first }, platform)) {
+        if (matchesKeybindingShortcut(event, { ...shortcut, key: first }, platform)) {
           pending = { key: first, expiresAt: now + 1000 };
           return { handled: true, command: null };
         }
