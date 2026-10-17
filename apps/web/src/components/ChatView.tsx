@@ -5505,7 +5505,8 @@ export default function ChatView(props: ChatViewProps) {
           void handleUnsnoozeActiveThread();
           return;
         }
-        if (!activeThreadShell || !canSnooze(activeThreadShell, { now: new Date().toISOString() })) return;
+        if (!activeThreadShell || !canSnooze(activeThreadShell, { now: new Date().toISOString() }))
+          return;
         void requestCustomSnooze().then(async (choice) => {
           if (!choice) return;
           const result = await snoozeThread(activeThreadRef, choice.snoozedUntil);

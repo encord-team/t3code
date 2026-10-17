@@ -1,7 +1,11 @@
 import type { KeybindingCommand, ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
-import { resolveChatShortcutCommand, type ShortcutMatchContext } from "../../keybindings";
+import {
+  createShortcutChordResolver,
+  resolveChatShortcutCommand,
+  type ShortcutMatchContext,
+} from "../../keybindings";
 import { isTerminalCloseConfirmPending } from "../../lib/terminalCloseConfirm";
 import {
   preventRepeatedTerminalCloseShortcut,
@@ -43,6 +47,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     latest.current = input;
   });
   useEffect(() => {
+    const chords = createShortcutChordResolver();
     const handler = (event: KeyboardEvent) => {
       const current = latest.current;
       const { keybindings } = current;
@@ -55,12 +60,25 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
         event.stopPropagation();
         return;
       }
-      if (!current.enabled || isCommandPaletteOpen()) return;
+      if (!current.enabled || isCommandPaletteOpen()) {
+        chords.reset();
+        return;
+      }
       const terminalFocusOwner = getTerminalFocusOwner();
-      if (event.defaultPrevented && terminalFocusOwner === null) return;
+      if (event.defaultPrevented && terminalFocusOwner === null) {
+        chords.reset();
+        return;
+      }
       const shortcutContext = current.getShortcutContext(event.target);
+      const chord = chords.resolve(event, keybindings, { context: shortcutContext });
+      if (chord.handled && !chord.command) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
 
       if (
+        !chord.handled &&
         !shortcutContext.terminalFocus &&
         !shortcutContext.modelPickerOpen &&
         shouldTypeToFocusComposer(event) &&
@@ -71,9 +89,11 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
         return;
       }
 
-      const command = resolveChatShortcutCommand(event, keybindings, current.scriptKeybindings, {
-        context: shortcutContext,
-      });
+      const command =
+        chord.command ??
+        resolveChatShortcutCommand(event, keybindings, current.scriptKeybindings, {
+          context: shortcutContext,
+        });
       if (!command) return;
       const run = current.commands[command] ?? current.fallback(command);
       if (!run || run({ event, terminalFocusOwner }) === false) return;
@@ -96,9 +116,13 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       event.preventDefault();
       current.closeThreadFind();
     };
+    window.addEventListener("blur", chords.reset);
+    window.addEventListener("focusin", chords.reset);
     window.addEventListener("keydown", handler, true);
     window.addEventListener("keydown", dismissFind);
     return () => {
+      window.removeEventListener("blur", chords.reset);
+      window.removeEventListener("focusin", chords.reset);
       window.removeEventListener("keydown", handler, true);
       window.removeEventListener("keydown", dismissFind);
     };
