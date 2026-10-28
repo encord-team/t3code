@@ -19,6 +19,7 @@ class DeploymentTests(unittest.TestCase):
             sha = 'a' * 40
             source = root / sha / 'source'
             (source / 'apps/server').mkdir(parents=True)
+            (source / 'package.json').write_text('{"engines":{"node":"26.12.1"}}')
             (source / 'apps/server/package.json').write_text('{"version":"0.0.45"}')
             (source / 'packages/contracts/src').mkdir(parents=True)
             (source / 'packages/contracts/src/environment.ts').write_text('ORCHESTRATION_PROTOCOL_VERSION = 2')
@@ -33,7 +34,7 @@ class DeploymentTests(unittest.TestCase):
                 if 'i' in args:
                     raise RuntimeError('dependency installation failed')
                 if '--version' in args:
-                    return 'v24.13.1'
+                    return 'v26.12.1'
                 return ''
             with mock.patch.object(deploy, 'run', side_effect=command):
                 with self.assertRaisesRegex(RuntimeError, 'dependency installation failed'):
@@ -60,13 +61,13 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(backups[0].read_text(), 'old')
 
     def test_dry_run_does_not_build_or_install(self):
-        with mock.patch.object(sys, 'argv', ['deploy', '--ref', 'HEAD', '--dry-run']), mock.patch.object(deploy, 'build') as build, mock.patch.object(deploy, 'install_mac') as install:
+        with mock.patch.object(sys, 'platform', 'darwin'), mock.patch.object(deploy.os, 'uname', return_value=SimpleNamespace(machine='arm64')), mock.patch.object(sys, 'argv', ['deploy', '--ref', 'HEAD', '--dry-run']), mock.patch.object(deploy, 'build') as build, mock.patch.object(deploy, 'install_mac') as install:
             deploy.main()
         build.assert_not_called()
         install.assert_not_called()
 
     def test_build_only_does_not_install(self):
-        with mock.patch.object(sys, 'argv', ['deploy', '--ref', 'HEAD', '--build-only']), mock.patch.object(deploy, 'build', return_value=dict(sha='a' * 40)), mock.patch.object(deploy, 'install_mac') as install:
+        with mock.patch.object(sys, 'platform', 'darwin'), mock.patch.object(deploy.os, 'uname', return_value=SimpleNamespace(machine='arm64')), mock.patch.object(sys, 'argv', ['deploy', '--ref', 'HEAD', '--build-only']), mock.patch.object(deploy, 'build', return_value=dict(sha='a' * 40)), mock.patch.object(deploy, 'install_mac') as install:
             deploy.main()
         install.assert_not_called()
 
