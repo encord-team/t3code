@@ -60,8 +60,9 @@ def build(options):
     # Rebuild into fresh output; a failed rebuild cannot corrupt a verified cache hit.
     output = output / ('build-' + timestamp())
     output.mkdir(parents=True, exist_ok=True)
-    command = [vp, 'env', 'exec', '--node', '24.13.1']
-    if run(command + ['node', '--version'], env=env, capture=True) != 'v24.13.1':
+    node_version = json.loads((source / 'package.json').read_text())['engines']['node']
+    command = [vp, 'env', 'exec', '--node', node_version]
+    if run(command + ['node', '--version'], env=env, capture=True) != 'v' + node_version:
         raise RuntimeError('Enable managed Node environments with vp env on before deploying')
     run(command + [vp, 'i', '--frozen-lockfile', '--filter=t3...', '--filter=@t3tools/web...', '--filter=@t3tools/desktop...', '--filter=@t3tools/scripts...', '--filter=@t3tools/monorepo'], cwd=source, env=env)
     # Public defaults only; never copy the contributor's .env into artifacts.

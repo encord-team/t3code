@@ -265,7 +265,7 @@ it.effect("routes the Mac fullscreen shortcut through the saved window mode", ()
   Effect.gen(function* () {
     const action = yield* Deferred.make<string>();
     const menu = yield* Deferred.make<readonly Electron.MenuItemConstructorOptions[]>();
-    yield* configureMenu(action, menu, "darwin");
+    yield* configureMenu(action, menu, { platform: "darwin" });
     const template = yield* Deferred.await(menu);
     const view = template.find((item) => item.label === "View");
     if (!view || !Array.isArray(view.submenu)) return yield* Effect.die("missing View menu");

@@ -21,8 +21,8 @@ an explicit SHA to deploy or rebuild an older commit. This script does not publi
 releases.
 
 The Mac needs Python 3.9+, Git, Vite+, and Rust 1.95.0 installed through rustup.
-Vite+ must have managed Node environments enabled (`vp env on`); builds use Node
-24.13.1. Pass `--vp` when Vite+ is not on PATH. The app directory must be writable.
+Vite+ must have managed Node environments enabled (`vp env on`); builds use the exact Node
+version declared in the checkout’s `package.json`. Pass `--vp` when Vite+ is not on PATH. The app directory must be writable.
 
 ```sh
 vp run deploy:mac -- --dry-run
